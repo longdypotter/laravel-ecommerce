@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Voyager;
 
 use App\Category;
 use App\CategoryProduct;
+use App\Product;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -207,7 +208,10 @@ class ProductsController extends VoyagerBaseController
             $view = "voyager::$slug.edit-add";
         }
         $allCategories=Category::all();
-        return Voyager::view($view, compact('dataType', 'dataTypeContent', 'isModelTranslatable','allCategories'));
+
+        $product = Product::find($id);
+        $categoriesForProduct = $product->categories()->get();
+        return Voyager::view($view, compact('dataType', 'dataTypeContent', 'isModelTranslatable','allCategories','categoriesForProduct'));
     }
 
     // POST BR(E)AD
@@ -235,25 +239,30 @@ class ProductsController extends VoyagerBaseController
         }
 
         if (!$request->ajax()) {
-            $this->insertUpdateData($request, $slug, $dataType->editRows, $data);
+            $requestNew=$request;
+            $requestNew['price']= $request->price * 100;
+
+            // $this->insertUpdateData($request, $slug, $dataType->editRows, $data);original
+            $this->insertUpdateData($requestNew, $slug, $dataType->editRows, $data);
 
             event(new BreadDataUpdated($dataType, $data));
 
             CategoryProduct::where('product_id',$id)->delete();
 
             //reinsert if there's at least one category checked
+            $this->updateProductCategories($request,$id);
 
-            if($request->category)
-            {
-                foreach($request->category as $category)
-                {
+            // if($request->category)
+            // {
+            //     foreach($request->category as $category)
+            //     {
                     
-                    CategoryProduct::create([
-                                            'product_id'=>$id,
-                                            'category_id' => $category,
-                    ]);
-                }
-            }
+            //         CategoryProduct::create([
+            //                                 'product_id'=>$id,
+            //                                 'category_id' => $category,
+            //         ]);
+            //     }
+            // }
 
             return redirect()
                 ->route("voyager.{$dataType->slug}.index")
@@ -306,9 +315,11 @@ class ProductsController extends VoyagerBaseController
             $view = "voyager::$slug.edit-add";
         }
         //category
+       
         $allCategories=Category::all();
-
-        return Voyager::view($view, compact('dataType', 'dataTypeContent', 'isModelTranslatable','allCategories'));
+        $categoriesForProduct = collect([]);
+        
+        return Voyager::view($view, compact('dataType', 'dataTypeContent', 'isModelTranslatable','allCategories','categoriesForProduct'));
     }
 
     /**
@@ -335,27 +346,33 @@ class ProductsController extends VoyagerBaseController
         }
        
         if (!$request->has('_validate')) {
-            $data = $this->insertUpdateData($request, $slug, $dataType->addRows, new $dataType->model_name());
+            $requestNew=$request;
+            $requestNew['price']= $request->price * 100;
+            // $data = $this->insertUpdateData($request, $slug, $dataType->addRows, new $dataType->model_name());original
+            $data = $this->insertUpdateData($requestNew, $slug, $dataType->addRows, new $dataType->model_name());
             // dd($data);
 
             event(new BreadDataAdded($dataType, $data));
 
             if ($request->ajax()) {
+
                 return response()->json(['success' => true, 'data' => $data]);
             }
 
             //categorystore
-            if($request->category)
-            {
-                foreach($request->category as $category)
-                {
+
+            $this->updateProductCategories($request,$data->id);
+            // if($request->category)
+            // {
+            //     foreach($request->category as $category)
+            //     {
                     
-                    CategoryProduct::create([
-                                            'product_id'=>$data->id,
-                                            'category_id' => $category,
-                    ]);
-                }
-            }
+            //         CategoryProduct::create([
+            //                                 'product_id'=>$data->id,
+            //                                 'category_id' => $category,
+            //         ]);
+            //     }
+            // }
 
             return redirect()
                 ->route("voyager.{$dataType->slug}.index")
@@ -366,97 +383,6 @@ class ProductsController extends VoyagerBaseController
         }
     }
 
-    //***************************************
-    //                _____
-    //               |  __ \
-    //               | |  | |
-    //               | |  | |
-    //               | |__| |
-    //               |_____/
-    //
-    //         Delete an item BREA(D)
-    //
-    //****************************************
-
-    public function destroy(Request $request, $id)
-    {
-        $slug = $this->getSlug($request);
-
-        $dataType = Voyager::model('DataType')->where('slug', '=', $slug)->first();
-
-        // Check permission
-        $this->authorize('delete', app($dataType->model_name));
-
-        // Init array of IDs
-        $ids = [];
-        if (empty($id)) {
-            // Bulk delete, get IDs from POST
-            $ids = explode(',', $request->ids);
-        } else {
-            // Single item delete, get ID from URL
-            $ids[] = $id;
-        }
-        foreach ($ids as $id) {
-            $data = call_user_func([$dataType->model_name, 'findOrFail'], $id);
-            $this->cleanup($dataType, $data);
-        }
-
-        $displayName = count($ids) > 1 ? $dataType->display_name_plural : $dataType->display_name_singular;
-
-        $res = $data->destroy($ids);
-        $data = $res
-            ? [
-                'message'    => __('voyager::generic.successfully_deleted')." {$displayName}",
-                'alert-type' => 'success',
-            ]
-            : [
-                'message'    => __('voyager::generic.error_deleting')." {$displayName}",
-                'alert-type' => 'error',
-            ];
-
-        if ($res) {
-            event(new BreadDataDeleted($dataType, $data));
-        }
-
-        return redirect()->route("voyager.{$dataType->slug}.index")->with($data);
-    }
-
-    /**
-     * Remove translations, images and files related to a BREAD item.
-     *
-     * @param \Illuminate\Database\Eloquent\Model $dataType
-     * @param \Illuminate\Database\Eloquent\Model $data
-     *
-     * @return void
-     */
-    protected function cleanup($dataType, $data)
-    {
-        // Delete Translations, if present
-        if (is_bread_translatable($data)) {
-            $data->deleteAttributeTranslations($data->getTranslatableAttributes());
-        }
-
-        // Delete Images
-        $this->deleteBreadImages($data, $dataType->deleteRows->where('type', 'image'));
-
-        // Delete Files
-        foreach ($dataType->deleteRows->where('type', 'file') as $row) {
-            if (isset($data->{$row->field})) {
-                foreach (json_decode($data->{$row->field}) as $file) {
-                    $this->deleteFileIfExists($file->download_link);
-                }
-            }
-        }
-    }
-
-    /**
-     * Delete all images related to a BREAD item.
-     *
-     * @param \Illuminate\Database\Eloquent\Model $data
-     * @param \Illuminate\Database\Eloquent\Model $rows
-     *
-     * @return void
-     */
     public function deleteBreadImages($data, $rows)
     {
         foreach ($rows as $row) {
@@ -544,5 +470,19 @@ class ProductsController extends VoyagerBaseController
             $i->$column = ($key + 1);
             $i->save();
         }
+    }
+    protected function updateProductCategories(Request $request,$id)
+    {
+            if($request->category)
+            {
+                foreach($request->category as $category)
+                {
+                    
+                    CategoryProduct::create([
+                                            'product_id'=>$id,
+                                            'category_id' => $category,
+                    ]);
+                }
+            }
     }
 }

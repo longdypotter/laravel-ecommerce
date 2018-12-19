@@ -18,7 +18,8 @@
     <div class="page-content edit-add container-fluid">
         <div class="row">
             <div class="col-md-12">
-
+                <div class="row">
+                <div class="col-md-9">
                 <div class="panel panel-bordered">
                     <!-- form start -->
                     <form role="form"
@@ -83,14 +84,15 @@
                                     <label>Categories</label>
                                     <ul style="list-style-type:none;padding-left:0;">
                                         @foreach($allCategories as $category)
-                                        <li><label><input value="{{$category->id}}" type="checkbox"  name="category[]" style="margin-right:5px;">{{$category->name}}</label></li>
+                                        <li><label><input value="{{$category->id}}" type="checkbox"  name="category[]" style="margin-right:5px;" {{ $categoriesForProduct->contains($category) ? 'checked' : ''}}>{{$category->name}}</label></li>
                                         @endforeach
                                     </ul>
                                 </div>
                             <!-- categories -->
 
                         </div><!-- panel-body -->
-
+                        </div>
+                        <div><!--row-->
                         <div class="panel-footer">
                             <button type="submit" class="btn btn-primary save">{{ __('voyager::generic.save') }}</button>
                         </div>
@@ -192,6 +194,9 @@
                 $('#confirm_delete_modal').modal('hide');
             });
             $('[data-toggle="tooltip"]').tooltip();
+
+            var price = $('input[name="price"]').val();
+            $('input[name="price"]').val(price / 100);
         });
     </script>
 @stop
