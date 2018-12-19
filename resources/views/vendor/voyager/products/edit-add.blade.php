@@ -8,7 +8,7 @@
 
 @section('page_header')
     <h1 class="page-title">
-        <i class="{{ $dataType->icon }}"></i>
+        OUR View<i class="{{ $dataType->icon }}"></i>
        Test {{ __('voyager::generic.'.(!is_null($dataTypeContent->getKey()) ? 'edit' : 'add')).' '.$dataType->display_name_singular }}
     </h1>
     @include('voyager::multilingual.language-selector')
@@ -77,6 +77,17 @@
                                     </div>
                                 @endif
                             @endforeach
+                            
+                            <!-- categories -->
+                                <div class="form-group">
+                                    <label>Categories</label>
+                                    <ul style="list-style-type:none;padding-left:0;">
+                                        @foreach($allCategories as $category)
+                                        <li><label><input value="{{$category->id}}" type="checkbox"  name="category[]" style="margin-right:5px;">{{$category->name}}</label></li>
+                                        @endforeach
+                                    </ul>
+                                </div>
+                            <!-- categories -->
 
                         </div><!-- panel-body -->
 
